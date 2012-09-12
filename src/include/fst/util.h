@@ -41,6 +41,7 @@ using std::vector;
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
 
 //
 // UTILITY FOR ERROR HANDLING
@@ -264,7 +265,7 @@ void WeightToStr(Weight w, string *s) {
   ostringstream strm;
   strm.precision(9);
   strm << w;
-  *s += strm.str();
+  s->append(strm.str().data(), strm.str().size());
 }
 
 // Utilities for reading/writing label pairs
@@ -312,7 +313,7 @@ bool ReadLabelPairs(const string& filename,
 template <typename Label>
 bool WriteLabelPairs(const string& filename,
                      const vector<pair<Label, Label> >& pairs) {
-  ostream *strm = &std::cout;
+  ostream *strm = &cout;
   if (!filename.empty()) {
     strm = new ofstream(filename.c_str());
     if (!*strm) {
@@ -329,7 +330,7 @@ bool WriteLabelPairs(const string& filename,
                << (filename.empty() ? "standard output" : filename);
     return false;
   }
-  if (strm != &std::cout)
+  if (strm != &cout)
     delete strm;
   return true;
 }

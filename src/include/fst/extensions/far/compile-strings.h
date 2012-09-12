@@ -56,7 +56,7 @@ class StringReader {
                const SymbolTable *syms = 0,
                Label unknown_label = kNoStateId)
       : nline_(0), strm_(istrm), source_(source), entry_type_(entry_type),
-        token_type_(token_type), done_(false),
+        token_type_(token_type), symbols_(syms), done_(false),
         compiler_(token_type, syms, unknown_label, allow_negative_labels) {
     Next();  // Initialize the reader to the first input.
   }
@@ -87,8 +87,12 @@ class StringReader {
       done_ = true;                  // whitespace at the end of a file.
   }
 
-  VectorFst<A> *GetVectorFst() {
+  VectorFst<A> *GetVectorFst(bool keep_symbols = false) {
     VectorFst<A> *fst = new VectorFst<A>;
+    if (keep_symbols) {
+      fst->SetInputSymbols(symbols_);
+      fst->SetOutputSymbols(symbols_);
+    }
     if (compiler_(content_, fst)) {
       return fst;
     } else {
@@ -97,9 +101,16 @@ class StringReader {
     }
   }
 
-  CompactFst<A, StringCompactor<A> > *GetCompactFst() {
-    CompactFst<A, StringCompactor<A> > *fst =
-        new CompactFst<A, StringCompactor<A> >;
+  CompactFst<A, StringCompactor<A> > *GetCompactFst(bool keep_symbols = false) {
+    CompactFst<A, StringCompactor<A> > *fst;
+    if (keep_symbols) {
+      VectorFst<A> tmp;
+      tmp.SetInputSymbols(symbols_);
+      tmp.SetOutputSymbols(symbols_);
+      fst = new CompactFst<A, StringCompactor<A> >(tmp);
+    } else {
+      fst = new CompactFst<A, StringCompactor<A> >;
+    }
     if (compiler_(content_, fst)) {
       return fst;
     } else {
@@ -114,6 +125,7 @@ class StringReader {
   string source_;
   EntryType entry_type_;
   TokenType token_type_;
+  const SymbolTable *symbols_;
   bool done_;
   StringCompiler<A> compiler_;
   string content_;  // The actual content of the input stream's next FST.
@@ -135,6 +147,8 @@ void FarCompileStrings(const vector<string> &in_fnames,
                        FarTokenType tt,
                        const string &symbols_fname,
                        const string &unknown_symbol,
+                       bool keep_symbols,
+                       bool initial_symbols,
                        bool allow_negative_labels,
                        bool file_list_input,
                        const string &key_prefix,
@@ -175,8 +189,9 @@ void FarCompileStrings(const vector<string> &in_fnames,
   const SymbolTable *syms = 0;
   typename Arc::Label unknown_label = kNoLabel;
   if (!symbols_fname.empty()) {
-    syms = SymbolTable::ReadText(symbols_fname,
-                                 allow_negative_labels);
+    SymbolTableTextOptions opts;
+    opts.allow_negative = allow_negative_labels;
+    syms = SymbolTable::ReadText(symbols_fname, opts);
     if (!syms) {
       FSTERROR() << "FarCompileStrings: error reading symbol table: "
                  << symbols_fname;
@@ -199,32 +214,47 @@ void FarCompileStrings(const vector<string> &in_fnames,
   vector<string> inputs;
   if (file_list_input) {
     for (int i = 1; i < in_fnames.size(); ++i) {
-      ifstream istrm(in_fnames[i].c_str());
+      istream *istrm = in_fnames.empty() ? &cin :
+          new ifstream(in_fnames[i].c_str());
       string str;
-      while (getline(istrm, str))
+      while (getline(*istrm, str))
         inputs.push_back(str);
+      if (!in_fnames.empty())
+        delete istrm;
     }
   } else {
     inputs = in_fnames;
   }
 
   for (int i = 0, n = 0; i < inputs.size(); ++i) {
+    if (generate_keys == 0 && inputs[i].empty()) {
+      FSTERROR() << "FarCompileStrings: read from a file instead of stdin or"
+                 << " set the --generate_keys flags.";
+      delete far_writer;
+      delete syms;
+      return;
+    }
     int key_size = generate_keys ? generate_keys :
         (entry_type == StringReader<Arc>::FILE ? 1 :
          KeySize(inputs[i].c_str()));
-    ifstream istrm(inputs[i].c_str());
+    istream *istrm = inputs[i].empty() ? &cin :
+        new ifstream(inputs[i].c_str());
 
+    bool keep_syms = keep_symbols;
     for (StringReader<Arc> reader(
-             istrm, inputs[i], entry_type, token_type,
-             allow_negative_labels, syms, unknown_label);
+             *istrm, inputs[i].empty() ? "stdin" : inputs[i],
+             entry_type, token_type, allow_negative_labels,
+             syms, unknown_label);
          !reader.Done();
          reader.Next()) {
       ++n;
       const Fst<Arc> *fst;
       if (compact)
-        fst = reader.GetCompactFst();
+        fst = reader.GetCompactFst(keep_syms);
       else
-        fst = reader.GetVectorFst();
+        fst = reader.GetVectorFst(keep_syms);
+      if (initial_symbols)
+        keep_syms = false;
       if (!fst) {
         FSTERROR() << "FarCompileStrings: compiling string number " << n
                    << " in file " << inputs[i] << " failed with token_type = "
@@ -236,6 +266,7 @@ void FarCompileStrings(const vector<string> &in_fnames,
                        (fet == FET_FILE ? "file" : "unknown"));
         delete far_writer;
         delete syms;
+        if (!inputs[i].empty()) delete istrm;
         return;
       }
       ostringstream keybuf;
@@ -260,6 +291,8 @@ void FarCompileStrings(const vector<string> &in_fnames,
     }
     if (generate_keys == 0)
       n = 0;
+    if (!inputs[i].empty())
+      delete istrm;
   }
 
   delete far_writer;

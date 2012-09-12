@@ -32,6 +32,7 @@ using std::vector;
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <fst/script/weight-class.h>
 
 namespace fst {

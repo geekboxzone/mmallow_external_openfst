@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <fst/util.h>
 
 namespace fst {

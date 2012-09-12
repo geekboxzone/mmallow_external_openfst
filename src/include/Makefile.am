@@ -1,10 +1,17 @@
 if HAVE_FAR
 far_include_headers = fst/extensions/far/compile-strings.h \
-fst/extensions/far/create.h fst/extensions/far/extract.h \
-fst/extensions/far/far.h fst/extensions/far/farlib.h \
-fst/extensions/far/farscript.h fst/extensions/far/info.h \
-fst/extensions/far/main.h fst/extensions/far/print-strings.h \
-fst/extensions/far/stlist.h fst/extensions/far/sttable.h
+fst/extensions/far/create.h fst/extensions/far/equal.h \
+fst/extensions/far/extract.h fst/extensions/far/far.h \
+fst/extensions/far/farlib.h fst/extensions/far/farscript.h \
+fst/extensions/far/info.h fst/extensions/far/main.h \
+fst/extensions/far/print-strings.h fst/extensions/far/stlist.h \
+fst/extensions/far/sttable.h
+endif
+
+if HAVE_NGRAM
+ngram_include_headers = fst/extensions/ngram/bitmap-index.h \
+fst/extensions/ngram/ngram-fst.h \
+fst/extensions/ngram/nthbit.h
 endif
 
 if HAVE_PDT
@@ -62,6 +69,6 @@ fst/replace-util.h fst/icu.h fst/string.h fst/signed-log-weight.h \
 fst/sparse-tuple-weight.h fst/sparse-power-weight.h fst/expectation-weight.h \
 fst/symbol-table-ops.h fst/bi-table.h \
 $(far_include_headers) \
+$(ngram_include_headers) \
 $(pdt_include_headers) \
 $(script_include_headers)
-

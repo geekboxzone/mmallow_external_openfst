@@ -83,8 +83,17 @@ namespace fst {
 //   uint64 Properties(uint64 props) const;
 // };
 
+//
+// MATCHER FLAGS (see also kLookAheadFlags in lookahead-matcher.h)
+//
+// Matcher prefers being used as the matching side in composition.
+const uint32 kPreferMatch  = 0x00000001;
+
+// Matcher needs to be used as the matching side in composition.
+const uint32 kRequireMatch = 0x00000002;
+
 // Flags used for basic matchers (see also lookahead.h).
-const uint32 kMatcherFlags = 0x00000000;
+const uint32 kMatcherFlags = kPreferMatch | kRequireMatch;
 
 // Matcher interface, templated on the Arc definition; used
 // for matcher specializations that are returned by the
@@ -452,6 +461,12 @@ class RhoMatcher : public MatcherBase<typename M::Arc> {
 
   virtual uint64 Properties(uint64 props) const;
 
+  virtual uint32 Flags() const {
+    if (rho_label_ == kNoLabel || match_type_ == MATCH_NONE)
+      return matcher_->Flags();
+    return matcher_->Flags() | kRequireMatch;
+  }
+
  private:
   virtual void SetState_(StateId s) { SetState(s); }
   virtual bool Find_(Label label) { return Find(label); }
@@ -631,6 +646,15 @@ class SigmaMatcher : public MatcherBase<typename M::Arc> {
 
   virtual uint64 Properties(uint64 props) const;
 
+  virtual uint32 Flags() const {
+    if (sigma_label_ == kNoLabel || match_type_ == MATCH_NONE)
+      return matcher_->Flags();
+    // kRequireMatch temporarily disabled until issues
+    // in //speech/gaudi/annotation/util/denorm are resolved.
+    // return matcher_->Flags() | kRequireMatch;
+    return matcher_->Flags();
+  }
+
 private:
   virtual void SetState_(StateId s) { SetState(s); }
   virtual bool Find_(Label label) { return Find(label); }
@@ -722,11 +746,6 @@ class PhiMatcher : public MatcherBase<typename M::Arc> {
       match_type_ = MATCH_NONE;
       error_ = true;
     }
-    if (phi_label == 0) {
-      FSTERROR() << "PhiMatcher: 0 cannot be used as phi_label";
-      phi_label_ = kNoLabel;
-      error_ = true;
-    }
 
     if (rewrite_mode == MATCHER_REWRITE_AUTO)
       rewrite_both_ = fst.Properties(kAcceptor, true);
@@ -768,10 +787,15 @@ class PhiMatcher : public MatcherBase<typename M::Arc> {
   const Arc& Value() const {
     if ((phi_match_ == kNoLabel) && (phi_weight_ == Weight::One())) {
       return matcher_->Value();
+    } else if (phi_match_ == 0) {  // Virtual epsilon loop
+      phi_arc_ = Arc(kNoLabel, 0, Weight::One(), state_);
+      if (match_type_ == MATCH_OUTPUT)
+        swap(phi_arc_.ilabel, phi_arc_.olabel);
+      return phi_arc_;
     } else {
       phi_arc_ = matcher_->Value();
       phi_arc_.weight = Times(phi_weight_, phi_arc_.weight);
-      if (phi_match_ != kNoLabel) {
+      if (phi_match_ != kNoLabel) {  // Phi loop match
         if (rewrite_both_) {
           if (phi_arc_.ilabel == phi_label_)
             phi_arc_.ilabel = phi_match_;
@@ -792,6 +816,12 @@ class PhiMatcher : public MatcherBase<typename M::Arc> {
   virtual const FST &GetFst() const { return matcher_->GetFst(); }
 
   virtual uint64 Properties(uint64 props) const;
+
+  virtual uint32 Flags() const {
+    if (phi_label_ == kNoLabel || match_type_ == MATCH_NONE)
+      return matcher_->Flags();
+    return matcher_->Flags() | kRequireMatch;
+  }
 
 private:
   virtual void SetState_(StateId s) { SetState(s); }
@@ -818,19 +848,33 @@ private:
 
 template <class M> inline
 bool PhiMatcher<M>::Find(Label match_label) {
-  if (match_label == phi_label_ && phi_label_ != kNoLabel) {
-    FSTERROR() << "PhiMatcher::Find: bad label (phi)";
+  if (match_label == phi_label_ && phi_label_ != kNoLabel && phi_label_ != 0) {
+    FSTERROR() << "PhiMatcher::Find: bad label (phi): " << phi_label_;
     error_ = true;
     return false;
   }
   matcher_->SetState(state_);
   phi_match_ = kNoLabel;
   phi_weight_ = Weight::One();
+  if (phi_label_ == 0) {          // When 'phi_label_ == 0',
+    if (match_label == kNoLabel)  // there are no more true epsilon arcs,
+      return false;
+    if (match_label == 0) {       // but virtual eps loop need to be returned
+      if (!matcher_->Find(kNoLabel)) {
+        return matcher_->Find(0);
+      } else {
+        phi_match_ = 0;
+        return true;
+      }
+    }
+  }
   if (!has_phi_ || match_label == 0 || match_label == kNoLabel)
     return matcher_->Find(match_label);
   StateId state = state_;
   while (!matcher_->Find(match_label)) {
-    if (!matcher_->Find(phi_label_))
+    // Look for phi transition (if phi_label_ == 0, we need to look
+    // for -1 to avoid getting the virtual self-loop)
+    if (!matcher_->Find(phi_label_ == 0 ? -1 : phi_label_))
       return false;
     if (phi_loop_ && matcher_->Value().nextstate == state) {
       phi_match_ = match_label;
@@ -856,6 +900,10 @@ uint64 PhiMatcher<M>::Properties(uint64 inprops) const {
   if (match_type_ == MATCH_NONE) {
     return outprops;
   } else if (match_type_ == MATCH_INPUT) {
+    if (phi_label_ == 0) {
+      outprops &= ~kEpsilons | ~kIEpsilons | ~kOEpsilons;
+      outprops |= kNoEpsilons | kNoIEpsilons;
+    }
     if (rewrite_both_) {
       return outprops & ~(kODeterministic | kNonODeterministic | kString |
                        kILabelSorted | kNotILabelSorted |
@@ -866,6 +914,10 @@ uint64 PhiMatcher<M>::Properties(uint64 inprops) const {
                        kOLabelSorted | kNotOLabelSorted);
     }
   } else if (match_type_ == MATCH_OUTPUT) {
+    if (phi_label_ == 0) {
+      outprops &= ~kEpsilons | ~kIEpsilons | ~kOEpsilons;
+      outprops |= kNoEpsilons | kNoOEpsilons;
+    }
     if (rewrite_both_) {
       return outprops & ~(kIDeterministic | kNonIDeterministic | kString |
                        kILabelSorted | kNotILabelSorted |

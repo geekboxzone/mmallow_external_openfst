@@ -175,10 +175,10 @@ class CompactFstData {
 
   bool Error() const { return error_; }
 
- private:
   // Byte alignment for states and arcs in file format (version 1 only)
   static const int kFileAlign = 16;
 
+ private:
   Unsigned *states_;
   CompactElement *compacts_;
   size_t nstates_;
@@ -539,17 +539,16 @@ class CompactFstImpl : public CacheImpl<A> {
   }
 
   Weight Final(StateId s) {
-    if (!HasFinal(s)) {
-      Arc arc(kNoLabel, kNoLabel, Weight::Zero(), kNoStateId);
-      if ((compactor_->Size() != -1) ||
-          (data_->States(s) != data_->States(s + 1)))
-        arc = ComputeArc(s,
-                         compactor_->Size() == -1
-                         ? data_->States(s)
-                         : s * compactor_->Size());
-      SetFinal(s, arc.ilabel == kNoLabel ? arc.weight : Weight::Zero());
-    }
-    return CacheImpl<A>::Final(s);
+    if (HasFinal(s))
+      return CacheImpl<A>::Final(s);
+    Arc arc(kNoLabel, kNoLabel, Weight::Zero(), kNoStateId);
+    if ((compactor_->Size() != -1) ||
+        (data_->States(s) != data_->States(s + 1)))
+      arc = ComputeArc(s,
+                       compactor_->Size() == -1
+                       ? data_->States(s)
+                       : s * compactor_->Size());
+    return arc.ilabel == kNoLabel ? arc.weight : Weight::Zero();
   }
 
   StateId NumStates() const {
@@ -650,7 +649,6 @@ class CompactFstImpl : public CacheImpl<A> {
     // Ensures compatibility
     int file_version = opts.align ? kAlignedFileVersion : kFileVersion;
     WriteHeader(strm, opts, file_version, &hdr);
-
     compactor_->Write(strm);
     return data_->Write(strm, opts);
   }
@@ -678,9 +676,13 @@ class CompactFstImpl : public CacheImpl<A> {
         data_->States(s + 1) : (s + 1) * compactor_->Size();
     for (size_t i = begin; i < end; ++i) {
       const Arc &arc = ComputeArc(s, i);
-      if (arc.ilabel == kNoLabel) continue;
-      PushArc(s, arc);
+      if (arc.ilabel == kNoLabel)
+        SetFinal(s, arc.weight);
+      else
+        PushArc(s, arc);
     }
+    if (!HasFinal(s))
+      SetFinal(s, Weight::Zero());
     SetArcs(s);
   }
 
@@ -693,6 +695,9 @@ class CompactFstImpl : public CacheImpl<A> {
 
   C *GetCompactor() const { return compactor_; }
   CompactFstData<CompactElement, U> *Data() const { return data_; }
+
+  // Properties always true of this Fst class
+  static const uint64 kStaticProperties = kExpanded;
 
  protected:
   template <class B, class D>
@@ -710,6 +715,8 @@ class CompactFstImpl : public CacheImpl<A> {
   }
 
  private:
+  friend class CompactFst<A, C, U>;  // allow access during write.
+
   void Init(const Fst<Arc> &fst) {
     string type = "compact";
     if (sizeof(U) != sizeof(uint32)) {
@@ -751,8 +758,6 @@ class CompactFstImpl : public CacheImpl<A> {
       SetProperties(kError, kError);
   }
 
-  // Properties always true of this Fst class
-  static const uint64 kStaticProperties = kExpanded;
   // Current unaligned file format version
   static const int kFileVersion = 2;
   // Current aligned file format version
@@ -863,6 +868,10 @@ class CompactFst : public ImplToExpandedFst< CompactFstImpl<A, C, U> > {
     return Fst<A>::WriteFile(filename);
   }
 
+  template <class F>
+  static bool WriteFst(const F &fst, const C &compactor, ostream &strm,
+                       const FstWriteOptions &opts);
+
   virtual void InitStateIterator(StateIteratorData<A> *data) const {
     GetImpl()->InitStateIterator(data);
   }
@@ -892,6 +901,115 @@ class CompactFst : public ImplToExpandedFst< CompactFstImpl<A, C, U> > {
 
   void operator=(const CompactFst<A, C, U> &fst);  // disallow
 };
+
+// Writes Fst in Compact format, potentially with a pass over the machine
+// before writing to compute the number of states and arcs.
+//
+template <class A, class C, class U>
+template <class F>
+bool CompactFst<A, C, U>::WriteFst(const F &fst,
+                                   const C &compactor,
+                                   ostream &strm,
+                                   const FstWriteOptions &opts) {
+  typedef U Unsigned;
+  typedef typename C::Element CompactElement;
+  typedef typename A::Weight Weight;
+  static const int kFileAlign =
+      CompactFstData<CompactElement, U>::kFileAlign;
+  int file_version = opts.align ?
+      CompactFstImpl<A, C, U>::kAlignedFileVersion :
+      CompactFstImpl<A, C, U>::kFileVersion;
+  size_t num_arcs = -1, num_states = -1, num_compacts = -1;
+  C first_pass_compactor = compactor;
+  if (fst.Type() == CompactFst<A, C, U>().Type()) {
+    const CompactFst<A, C, U> *compact_fst =
+        reinterpret_cast<const CompactFst<A, C, U> *>(&fst);
+    num_arcs = compact_fst->GetImpl()->Data()->NumArcs();
+    num_states = compact_fst->GetImpl()->Data()->NumStates();
+    num_compacts = compact_fst->GetImpl()->Data()->NumCompacts();
+    first_pass_compactor = *compact_fst->GetImpl()->GetCompactor();
+  } else {
+    // A first pass is needed to compute the state of the compactor, which
+    // is saved ahead of the rest of the data structures.  This unfortunately
+    // means forcing a complete double compaction when writing in this format.
+    // TODO(allauzen): eliminate mutable state from compactors.
+    num_arcs = 0;
+    num_states = 0;
+    for (StateIterator<F> siter(fst); !siter.Done(); siter.Next()) {
+      const StateId s = siter.Value();
+      ++num_states;
+      if (fst.Final(s) != Weight::Zero()) {
+        first_pass_compactor.Compact(
+            s, A(kNoLabel, kNoLabel, fst.Final(s), kNoStateId));
+      }
+      for (ArcIterator<F> aiter(fst, s); !aiter.Done(); aiter.Next()) {
+        ++num_arcs;
+        first_pass_compactor.Compact(s, aiter.Value());
+      }
+    }
+  }
+  FstHeader hdr;
+  hdr.SetStart(fst.Start());
+  hdr.SetNumStates(num_states);
+  hdr.SetNumArcs(num_arcs);
+  string type = "compact";
+  if (sizeof(U) != sizeof(uint32)) {
+    string size;
+    Int64ToStr(8 * sizeof(U), &size);
+    type += size;
+  }
+  type += "_";
+  type += C::Type();
+  uint64 copy_properties = fst.Properties(kCopyProperties, true);
+  if ((copy_properties & kError) || !compactor.Compatible(fst)) {
+    LOG(ERROR) << "fst incompatible with compactor";
+    return false;
+  }
+  uint64 properties = copy_properties |
+      CompactFstImpl<A, C, U>::kStaticProperties;
+  FstImpl<A>::WriteFstHeader(fst, strm, opts, file_version, type, properties,
+                             &hdr);
+  first_pass_compactor.Write(strm);
+  if (first_pass_compactor.Size() == -1)  {
+    if (opts.align && !AlignOutput(strm, kFileAlign)) {
+      LOG(ERROR) << "CompactFst::Write: Alignment failed: " << opts.source;
+      return false;
+    }
+    Unsigned compacts = 0;
+    for (StateIterator<F> siter(fst); !siter.Done(); siter.Next()) {
+      const StateId s = siter.Value();
+      strm.write(reinterpret_cast<const char *>(&compacts), sizeof(compacts));
+      if (fst.Final(s) != Weight::Zero()) {
+        ++compacts;
+      }
+      compacts += fst.NumArcs(s);
+    }
+    strm.write(reinterpret_cast<const char *>(&compacts), sizeof(compacts));
+  }
+  if (opts.align && !AlignOutput(strm, kFileAlign)) {
+    LOG(ERROR) << "Could not align file during write after writing states";
+  }
+  C second_pass_compactor = compactor;
+  CompactElement element;
+  for (StateIterator<F> siter(fst); !siter.Done(); siter.Next()) {
+    const StateId s = siter.Value();
+    if (fst.Final(s) != Weight::Zero()) {
+      element = second_pass_compactor.Compact(
+          s, A(kNoLabel, kNoLabel, fst.Final(s), kNoStateId));
+      strm.write(reinterpret_cast<const char *>(&element), sizeof(element));
+    }
+    for (ArcIterator<F> aiter(fst, s); !aiter.Done(); aiter.Next()) {
+      element = second_pass_compactor.Compact(s, aiter.Value());
+      strm.write(reinterpret_cast<const char *>(&element), sizeof(element));
+    }
+  }
+  strm.flush();
+  if (!strm) {
+    LOG(ERROR) << "CompactFst write failed: " << opts.source;
+    return false;
+  }
+  return true;
+}
 
 
 // Specialization for CompactFst; see generic version in fst.h

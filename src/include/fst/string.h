@@ -24,6 +24,7 @@
 #define FST_LIB_STRING_H_
 
 #include <fst/compact-fst.h>
+#include <fst/icu.h>
 #include <fst/mutable-fst.h>
 
 DECLARE_string(fst_field_separator);
@@ -48,7 +49,7 @@ class StringCompiler {
 
   // Compile string 's' into FST 'fst'.
   template <class F>
-  bool operator()(const string &s, F *fst) {
+  bool operator()(const string &s, F *fst) const {
     vector<Label> labels;
     if (!ConvertStringToLabels(s, &labels))
       return false;

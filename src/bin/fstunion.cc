@@ -25,6 +25,7 @@
 #include <fst/script/union.h>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 
 int main(int argc, char **argv) {
   using fst::script::FstClass;
@@ -36,7 +37,7 @@ int main(int argc, char **argv) {
   usage += " in1.fst in2.fst [out.fst]\n";
 
   std::set_new_handler(FailedNewHandler);
-  SetFlags(usage.c_str(), &argc, &argv, true);
+  SET_FLAGS(usage.c_str(), &argc, &argv, true);
   if (argc < 3 || argc > 4) {
     ShowUsage();
     return 1;

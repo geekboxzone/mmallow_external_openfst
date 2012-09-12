@@ -117,8 +117,10 @@ uint64 DeterminizeProperties(uint64 inprops, bool has_subsequential_label) {
   uint64 outprops = kAccessible;
   if (((kAcceptor | kNoIEpsilons) & inprops) || has_subsequential_label)
     outprops |= kIDeterministic;
-  outprops |= (kError | kAcceptor | kNoEpsilons | kAcyclic |
+  outprops |= (kError | kAcceptor | kAcyclic |
                kInitialAcyclic | kCoAccessible | kString) & inprops;
+  if (inprops & kNoIEpsilons)
+    outprops |= kNoEpsilons & inprops;
   if (inprops & kAccessible)
      outprops |= (kNotAcceptor | kEpsilons | kIEpsilons | kOEpsilons |
                   kCyclic) & inprops;
@@ -375,6 +377,7 @@ uint64 UnionProperties(uint64 inprops1, uint64 inprops2, bool delayed) {
   uint64 outprops = (kAcceptor | kUnweighted | kAcyclic | kAccessible)
                     & inprops1 & inprops2;
   outprops |= kError & (inprops1 | inprops2);
+  outprops |= kInitialAcyclic;
 
   bool empty1 = delayed;  // Can fst1 be the empty machine?
   bool empty2 = delayed;  // Can fst2 be the empty machine?

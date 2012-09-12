@@ -36,20 +36,17 @@ int main(int argc, char **argv) {
   string usage = "Prints some basic information about the FSTs in an FST ";
   usage += "archive.\n\n Usage:";
   usage += argv[0];
-  usage += " in1.far [in2.far...]\n";
+  usage += " [in1.far in2.far...]\n";
   usage += "  Flags: begin_key end_key list_fsts";
 
   std::set_new_handler(FailedNewHandler);
-  SetFlags(usage.c_str(), &argc, &argv, true);
-
-  if (argc < 2) {
-    ShowUsage();
-    return 1;
-  }
+  SET_FLAGS(usage.c_str(), &argc, &argv, true);
 
   vector<string> filenames;
   for (int i = 1; i < argc; ++i)
-    filenames.push_back(argv[i]);
+    filenames.push_back(strcmp(argv[i], "") != 0 ? argv[i] : "");
+  if (filenames.empty())
+    filenames.push_back("");
 
   s::FarInfo(filenames, fst::LoadArcTypeFromFar(filenames[0]),
              FLAGS_begin_key, FLAGS_end_key, FLAGS_list_fsts);

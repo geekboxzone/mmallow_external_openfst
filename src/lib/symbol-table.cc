@@ -20,6 +20,7 @@
 // Classes to provide symbol-to-integer and integer-to-symbol mappings.
 
 #include <fst/symbol-table.h>
+
 #include <fst/util.h>
 
 DEFINE_bool(fst_compat_symbols, true,
@@ -35,9 +36,12 @@ const int kLineLen = 8096;
 // Identifies stream data as a symbol table (and its endianity)
 static const int32 kSymbolTableMagicNumber = 2125658996;
 
+SymbolTableTextOptions::SymbolTableTextOptions()
+    : allow_negative(false), fst_field_separator(FLAGS_fst_field_separator) { }
+
 SymbolTableImpl* SymbolTableImpl::ReadText(istream &strm,
                                            const string &filename,
-                                           bool allow_negative) {
+                                           const SymbolTableTextOptions &opts) {
   SymbolTableImpl* impl = new SymbolTableImpl(filename);
 
   int64 nline = 0;
@@ -45,7 +49,7 @@ SymbolTableImpl* SymbolTableImpl::ReadText(istream &strm,
   while (strm.getline(line, kLineLen)) {
     ++nline;
     vector<char *> col;
-    string separator = FLAGS_fst_field_separator + "\n";
+    string separator = opts.fst_field_separator + "\n";
     SplitToVector(line, separator.c_str(), &col, true);
     if (col.size() == 0)  // empty line
       continue;
@@ -61,7 +65,7 @@ SymbolTableImpl* SymbolTableImpl::ReadText(istream &strm,
     char *p;
     int64 key = strtoll(value, &p, 10);
     if (p < value + strlen(value) ||
-        (!allow_negative && key < 0) || key == -1) {
+        (!opts.allow_negative && key < 0) || key == -1) {
       LOG(ERROR) << "SymbolTable::ReadText: Bad non-negative integer \""
                  << value << "\" (skipping), "
                  << "file = " << filename << ", line = " << nline;
@@ -74,21 +78,30 @@ SymbolTableImpl* SymbolTableImpl::ReadText(istream &strm,
 }
 
 void SymbolTableImpl::MaybeRecomputeCheckSum() const {
-  if (check_sum_finalized_)
-    return;
+  {
+    ReaderMutexLock check_sum_lock(&check_sum_mutex_);
+    if (check_sum_finalized_)
+      return;
+  }
+
+  // We'll aquire an exclusive lock to recompute the checksums.
+  MutexLock check_sum_lock(&check_sum_mutex_);
+  if (check_sum_finalized_)  // Another thread (coming in around the same time
+    return;                  // might have done it already).  So we recheck.
 
   // Calculate the original label-agnostic check sum.
-  check_sum_.Reset();
+  CheckSummer check_sum;
   for (int64 i = 0; i < symbols_.size(); ++i)
-    check_sum_.Update(symbols_[i], strlen(symbols_[i]) + 1);
-  check_sum_string_ = check_sum_.Digest();
+    check_sum.Update(symbols_[i], strlen(symbols_[i]) + 1);
+  check_sum_string_ = check_sum.Digest();
 
   // Calculate the safer, label-dependent check sum.
-  labeled_check_sum_.Reset();
+  CheckSummer labeled_check_sum;
   for (int64 key = 0; key < dense_key_limit_; ++key) {
     ostringstream line;
     line << symbols_[key] << '\t' << key;
-    labeled_check_sum_.Update(line.str()); }
+    labeled_check_sum.Update(line.str().data(), line.str().size());
+  }
   for (map<int64, const char*>::const_iterator it =
        key_map_.begin();
        it != key_map_.end();
@@ -96,10 +109,10 @@ void SymbolTableImpl::MaybeRecomputeCheckSum() const {
     if (it->first >= dense_key_limit_) {
       ostringstream line;
       line << it->second << '\t' << it->first;
-      labeled_check_sum_.Update(line.str());
+      labeled_check_sum.Update(line.str().data(), line.str().size());
     }
   }
-  labeled_check_sum_string_ = labeled_check_sum_.Digest();
+  labeled_check_sum_string_ = labeled_check_sum.Digest();
 
   check_sum_finalized_ = true;
 }
@@ -231,12 +244,22 @@ void SymbolTable::AddTable(const SymbolTable& table) {
     impl_->AddSymbol(iter.Symbol());
 }
 
-bool SymbolTable::WriteText(ostream &strm) const {
+bool SymbolTable::WriteText(ostream &strm,
+                            const SymbolTableTextOptions &opts) const {
+  if (opts.fst_field_separator.empty()) {
+    LOG(ERROR) << "Missing required field separator";
+    return false;
+  }
+  bool once_only = false;
   for (SymbolTableIterator iter(*this); !iter.Done(); iter.Next()) {
     ostringstream line;
-    line << iter.Symbol() << FLAGS_fst_field_separator[0] << iter.Value()
+    if (iter.Value() < 0 && !opts.allow_negative && !once_only) {
+      LOG(WARNING) << "Negative symbol table entry when not allowed";
+      once_only = true;
+    }
+    line << iter.Symbol() << opts.fst_field_separator[0] << iter.Value()
          << '\n';
-    strm.write(line.str().c_str(), line.str().length());
+    strm.write(line.str().data(), line.str().length());
   }
   return true;
 }

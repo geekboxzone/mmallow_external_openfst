@@ -36,6 +36,7 @@
 #include <fst/register.h>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <fst/symbol-table.h>
 #include <fst/util.h>
 
@@ -229,7 +230,7 @@ class Fst {
       }
       return Read(strm, FstReadOptions(filename));
     } else {
-      return Read(std::cin, FstReadOptions("standard input"));
+      return Read(cin, FstReadOptions("standard input"));
     }
   }
 
@@ -267,7 +268,6 @@ class Fst {
   virtual MatcherBase<A> *InitMatcher(MatchType match_type) const;
 
  protected:
-
   bool WriteFile(const string &filename) const {
     if (!filename.empty()) {
       ofstream strm(filename.c_str(), ofstream::out | ofstream::binary);
@@ -277,7 +277,7 @@ class Fst {
       }
       return Write(strm, FstWriteOptions(filename));
     } else {
-      return Write(std::cout, FstWriteOptions("standard output"));
+      return Write(cout, FstWriteOptions("standard output"));
     }
   }
 };
@@ -706,12 +706,13 @@ template <class A> class FstImpl {
   // This method is used in the cross-type serialization methods Fst::WriteFst.
   static void WriteFstHeader(const Fst<A> &fst, ostream &strm,
                              const FstWriteOptions& opts, int version,
-                             const string &type, FstHeader *hdr) {
+                             const string &type, uint64 properties,
+                             FstHeader *hdr) {
     if (opts.write_header) {
       hdr->SetFstType(type);
       hdr->SetArcType(A::Type());
       hdr->SetVersion(version);
-      hdr->SetProperties(fst.Properties(kFstProperties, false));
+      hdr->SetProperties(properties);
       int32 file_flags = 0;
       if (fst.InputSymbols() && opts.write_isymbols)
         file_flags |= FstHeader::HAS_ISYMBOLS;
@@ -737,14 +738,14 @@ template <class A> class FstImpl {
   // returns true on success, false on failure.
   static bool UpdateFstHeader(const Fst<A> &fst, ostream &strm,
                               const FstWriteOptions& opts, int version,
-                              const string &type, FstHeader *hdr,
-                              size_t header_offset) {
+                              const string &type, uint64 properties,
+                              FstHeader *hdr, size_t header_offset) {
     strm.seekp(header_offset);
     if (!strm) {
       LOG(ERROR) << "Fst::UpdateFstHeader: write failed: " << opts.source;
       return false;
     }
-    WriteFstHeader(fst, strm, opts, version, type, hdr);
+    WriteFstHeader(fst, strm, opts, version, type, properties, hdr);
     if (!strm) {
       LOG(ERROR) << "Fst::UpdateFstHeader: write failed: " << opts.source;
       return false;

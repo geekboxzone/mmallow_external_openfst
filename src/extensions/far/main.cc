@@ -26,6 +26,7 @@ using std::vector;
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <fst/extensions/far/main.h>
 
 namespace fst {
@@ -33,7 +34,9 @@ namespace fst {
 // Return the 'FarType' value corresponding to a far type name.
 FarType FarTypeFromString(const string &str) {
   FarType type = FAR_DEFAULT;
-  if (str == "stlist")
+  if (str == "fst")
+    type = FAR_FST;
+  else if (str == "stlist")
     type = FAR_STLIST;
   else if (str == "sttable")
     type = FAR_STTABLE;
@@ -46,6 +49,8 @@ FarType FarTypeFromString(const string &str) {
 // Return the textual name  corresponding to a 'FarType;.
 string FarTypeToString(FarType type) {
   switch (type) {
+    case FAR_FST:
+      return "fst";
     case FAR_STLIST:
       return "stlist";
     case FAR_STTABLE:
@@ -85,19 +90,14 @@ FarTokenType StringToFarTokenType(const string &s) {
 string LoadArcTypeFromFar(const string &far_fname) {
   FarHeader hdr;
 
-  if (far_fname.empty()) {
-    LOG(ERROR) << "Reading FAR from standard in not supported";
-    return "";
-  }
-
   if (!hdr.Read(far_fname)) {
-    LOG(ERROR) << "Error reading FAR: " << far_fname;
+    FSTERROR() << "Error reading FAR: " << far_fname;
     return "";
   }
 
   string atype = hdr.ArcType();
   if (atype == "unknown") {
-    LOG(ERROR) << "Empty FST archive: " << far_fname;
+    FSTERROR() << "Empty FST archive: " << far_fname;
     return "";
   }
 
@@ -108,7 +108,7 @@ string LoadArcTypeFromFst(const string &fst_fname) {
   FstHeader hdr;
   ifstream in(fst_fname.c_str(), ifstream::in | ifstream::binary);
   if (!hdr.Read(in, fst_fname)) {
-    LOG(ERROR) << "Error reading FST: " << fst_fname;
+    FSTERROR() << "Error reading FST: " << fst_fname;
     return "";
   }
 

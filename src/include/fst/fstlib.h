@@ -142,6 +142,8 @@
 #include <fst/state-reachable.h>
 #include <iostream>
 #include <fstream>
+#include <sstream>
+#include <fst/string.h>
 #include <fst/symbol-table.h>
 #include <fst/symbol-table-ops.h>
 #include <fst/test-properties.h>

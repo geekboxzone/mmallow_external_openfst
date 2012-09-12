@@ -4,7 +4,7 @@
 /* Define to 1 if you have the ICU library. */
 /* #undef HAVE_ICU */
 
-/* Define to 1 if the system has the type `std::tr1::hash<long long
+/* Define to 1 if the system has the type `std::hash<long long
    unsigned>'. */
 #define HAVE_STD__TR1__HASH_LONG_LONG_UNSIGNED_ 1
 

@@ -33,6 +33,7 @@ using std::vector;
 #include <fst/compat.h>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 
 
 #include <map>
@@ -54,6 +55,13 @@ struct SymbolTableReadOptions {
 
   vector<pair<int64, int64> > string_hash_ranges;
   string source;
+};
+
+struct SymbolTableTextOptions {
+  SymbolTableTextOptions();
+
+  bool allow_negative;
+  string fst_field_separator;
 };
 
 class SymbolTableImpl {
@@ -88,9 +96,9 @@ class SymbolTableImpl {
     return (key == -1) ? AddSymbol(symbol, available_key_++) : key;
   }
 
-  static SymbolTableImpl* ReadText(istream &strm,
-                                   const string &name,
-                                   bool allow_negative = false);
+  static SymbolTableImpl* ReadText(
+      istream &strm, const string &name,
+      const SymbolTableTextOptions &opts = SymbolTableTextOptions());
 
   static SymbolTableImpl* Read(istream &strm,
                                const SymbolTableReadOptions& opts);
@@ -149,13 +157,11 @@ class SymbolTableImpl {
   }
 
   string CheckSum() const {
-    MutexLock check_sum_lock(&check_sum_mutex_);
     MaybeRecomputeCheckSum();
     return check_sum_string_;
   }
 
   string LabeledCheckSum() const {
-    MutexLock check_sum_lock(&check_sum_mutex_);
     MaybeRecomputeCheckSum();
     return labeled_check_sum_string_;
   }
@@ -171,6 +177,8 @@ class SymbolTableImpl {
  private:
   // Recomputes the checksums (both of them) if we've had changes since the last
   // computation (i.e., if check_sum_finalized_ is false).
+  // Takes ~2.5 microseconds (dbg) or ~230 nanoseconds (opt) on a 2.67GHz Xeon
+  // if the checksum is up-to-date (requiring no recomputation).
   void MaybeRecomputeCheckSum() const;
 
   struct StrCmp {
@@ -188,8 +196,6 @@ class SymbolTableImpl {
 
   mutable RefCounter ref_count_;
   mutable bool check_sum_finalized_;
-  mutable CheckSummer check_sum_;
-  mutable CheckSummer labeled_check_sum_;
   mutable string check_sum_string_;
   mutable string labeled_check_sum_string_;
   mutable Mutex check_sum_mutex_;
@@ -212,6 +218,9 @@ class SymbolTable {
  public:
   static const int64 kNoSymbol = -1;
 
+  // Construct symbol table with an unspecified name.
+  SymbolTable() : impl_(new SymbolTableImpl("<unspecified>")) {}
+
   // Construct symbol table with a unique name.
   SymbolTable(const string& name) : impl_(new SymbolTableImpl(name)) {}
 
@@ -226,14 +235,21 @@ class SymbolTable {
     if (!impl_->DecrRefCount()) delete impl_;
   }
 
+  // Copys the implemenation from one symbol table to another.
+  void operator=(const SymbolTable &st) {
+    if (impl_ != st.impl_) {
+      st.impl_->IncrRefCount();
+      if (!impl_->DecrRefCount()) delete impl_;
+      impl_ = st.impl_;
+    }
+  }
+
   // Read an ascii representation of the symbol table from an istream. Pass a
   // name to give the resulting SymbolTable.
-  static SymbolTable* ReadText(istream &strm,
-                               const string& name,
-                               bool allow_negative = false) {
-    SymbolTableImpl* impl = SymbolTableImpl::ReadText(strm,
-                                                      name,
-                                                      allow_negative);
+  static SymbolTable* ReadText(
+      istream &strm, const string& name,
+      const SymbolTableTextOptions &opts = SymbolTableTextOptions()) {
+    SymbolTableImpl* impl = SymbolTableImpl::ReadText(strm, name, opts);
     if (!impl)
       return 0;
     else
@@ -242,13 +258,13 @@ class SymbolTable {
 
   // read an ascii representation of the symbol table
   static SymbolTable* ReadText(const string& filename,
-                               bool allow_negative = false) {
+      const SymbolTableTextOptions &opts = SymbolTableTextOptions()) {
     ifstream strm(filename.c_str(), ifstream::in);
     if (!strm) {
       LOG(ERROR) << "SymbolTable::ReadText: Can't open file " << filename;
       return 0;
     }
-    return ReadText(strm, filename, allow_negative);
+    return ReadText(strm, filename, opts);
   }
 
 
@@ -341,7 +357,9 @@ class SymbolTable {
   }
 
   // Dump an ascii text representation of the symbol table via a stream
-  virtual bool WriteText(ostream &strm) const;
+  virtual bool WriteText(
+      ostream &strm,
+      const SymbolTableTextOptions &opts = SymbolTableTextOptions()) const;
 
   // Dump an ascii text representation of the symbol table
   bool WriteText(const string& filename) const {
@@ -404,8 +422,6 @@ class SymbolTable {
 
  private:
   SymbolTableImpl* impl_;
-
-  void operator=(const SymbolTable &table);  // disallow
 };
 
 
@@ -501,6 +517,20 @@ SymbolTable *RelabelSymbolTable(const SymbolTable *table,
 
   return new_table;
 }
+
+// Symbol Table Serialization
+inline void SymbolTableToString(const SymbolTable *table, string *result) {
+  ostringstream ostrm;
+  table->Write(ostrm);
+  *result = ostrm.str();
+}
+
+inline SymbolTable *StringToSymbolTable(const string &s) {
+  istringstream istrm(s);
+  return SymbolTable::Read(istrm, SymbolTableReadOptions());
+}
+
+
 
 }  // namespace fst
 

@@ -27,7 +27,10 @@
 using std::vector;
 
 #include <fst/extensions/far/far.h>
+#include <fst/shortest-distance.h>
 #include <fst/string.h>
+
+DECLARE_string(far_field_separator);
 
 namespace fst {
 
@@ -35,9 +38,10 @@ template <class Arc>
 void FarPrintStrings(
     const vector<string> &ifilenames, const FarEntryType entry_type,
     const FarTokenType far_token_type, const string &begin_key,
-    const string &end_key, const bool print_key, const string &symbols_fname,
-    const int32 generate_filenames, const string &filename_prefix,
-    const string &filename_suffix) {
+    const string &end_key, const bool print_key, const bool print_weight,
+    const string &symbols_fname, const bool initial_symbols,
+    const int32 generate_filenames,
+    const string &filename_prefix, const string &filename_suffix) {
 
   typename StringPrinter<Arc>::TokenType token_type;
   if (far_token_type == FTT_SYMBOL) {
@@ -54,15 +58,15 @@ void FarPrintStrings(
   const SymbolTable *syms = 0;
   if (!symbols_fname.empty()) {
     // allow negative flag?
-    syms = SymbolTable::ReadText(symbols_fname, true);
+    SymbolTableTextOptions opts;
+    opts.allow_negative = true;
+    syms = SymbolTable::ReadText(symbols_fname, opts);
     if (!syms) {
       FSTERROR() << "FarPrintStrings: error reading symbol table: "
                  << symbols_fname;
       return;
     }
   }
-
-  StringPrinter<Arc> string_printer(token_type, syms);
 
   FarReader<Arc> *far_reader = FarReader<Arc>::Open(ifilenames);
   if (!far_reader) return;
@@ -83,14 +87,21 @@ void FarPrintStrings(
     okey = key;
 
     const Fst<Arc> &fst = far_reader->GetFst();
+    if (i == 1 && initial_symbols && syms == 0 && fst.InputSymbols() != 0)
+      syms = fst.InputSymbols()->Copy();
     string str;
     VLOG(2) << "Handling key: " << key;
+    StringPrinter<Arc> string_printer(
+        token_type, syms ? syms : fst.InputSymbols());
     string_printer(fst, &str);
 
     if (entry_type == FET_LINE) {
       if (print_key)
-        cout << key << "\t";
-      cout << str << endl;
+        cout << key << FLAGS_far_field_separator[0];
+      cout << str;
+      if (print_weight)
+        cout << FLAGS_far_field_separator[0] << ShortestDistance(fst);
+      cout << endl;
     } else if (entry_type == FET_FILE) {
       stringstream sstrm;
       if (generate_filenames) {
@@ -117,6 +128,7 @@ void FarPrintStrings(
         ostrm << "\n";
     }
   }
+  delete syms;
 }
 
 

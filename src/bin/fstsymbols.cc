@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
   usage += " [in.fst [out.fst]]\n";
 
   std::set_new_handler(FailedNewHandler);
-  SetFlags(usage.c_str(), &argc, &argv, true);
+  SET_FLAGS(usage.c_str(), &argc, &argv, true);
   if (argc > 3) {
     ShowUsage();
     return 1;
@@ -78,17 +78,18 @@ int main(int argc, char **argv) {
     }
   }
 
+  fst::SymbolTableTextOptions opts;
+  opts.allow_negative = FLAGS_allow_negative_labels;
+
   if (FLAGS_clear_isymbols)
     fst->SetInputSymbols(0);
   else if (!FLAGS_isymbols.empty())
-    fst->SetInputSymbols(
-        SymbolTable::ReadText(FLAGS_isymbols, FLAGS_allow_negative_labels));
+    fst->SetInputSymbols(SymbolTable::ReadText(FLAGS_isymbols, opts));
 
   if (FLAGS_clear_osymbols)
     fst->SetOutputSymbols(0);
   else if (!FLAGS_osymbols.empty())
-    fst->SetOutputSymbols(
-        SymbolTable::ReadText(FLAGS_osymbols, FLAGS_allow_negative_labels));
+    fst->SetOutputSymbols(SymbolTable::ReadText(FLAGS_osymbols, opts));
 
   if (!FLAGS_relabel_ipairs.empty()) {
     typedef int64 Label;

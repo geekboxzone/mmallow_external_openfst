@@ -295,6 +295,10 @@ class StateMapFstImpl : public CacheImpl<B> {
     SetArcs(s);
   }
 
+  const Fst<A> &GetFst() const {
+    return *fst_;
+  }
+
  private:
   void Init() {
     SetType("statemap");
@@ -364,10 +368,10 @@ class StateMapFst : public ImplToFst< StateMapFstImpl<A, B, C> > {
     GetImpl()->InitArcIterator(s, data);
   }
 
- private:
-  // Makes visible to friends.
+ protected:
   Impl *GetImpl() const { return ImplToFst<Impl>::GetImpl(); }
 
+ private:
   void operator=(const StateMapFst<A, B, C> &fst);  // disallow
 };
 

@@ -82,11 +82,14 @@ am__nobase_include_HEADERS_DIST = fst/arc.h fst/determinize.h \
 	fst/sparse-power-weight.h fst/expectation-weight.h \
 	fst/symbol-table-ops.h fst/bi-table.h \
 	fst/extensions/far/compile-strings.h \
-	fst/extensions/far/create.h fst/extensions/far/extract.h \
-	fst/extensions/far/far.h fst/extensions/far/farlib.h \
-	fst/extensions/far/farscript.h fst/extensions/far/info.h \
-	fst/extensions/far/main.h fst/extensions/far/print-strings.h \
-	fst/extensions/far/stlist.h fst/extensions/far/sttable.h \
+	fst/extensions/far/create.h fst/extensions/far/equal.h \
+	fst/extensions/far/extract.h fst/extensions/far/far.h \
+	fst/extensions/far/farlib.h fst/extensions/far/farscript.h \
+	fst/extensions/far/info.h fst/extensions/far/main.h \
+	fst/extensions/far/print-strings.h fst/extensions/far/stlist.h \
+	fst/extensions/far/sttable.h \
+	fst/extensions/ngram/bitmap-index.h \
+	fst/extensions/ngram/ngram-fst.h fst/extensions/ngram/nthbit.h \
 	fst/extensions/pdt/collection.h fst/extensions/pdt/compose.h \
 	fst/extensions/pdt/expand.h fst/extensions/pdt/info.h \
 	fst/extensions/pdt/paren.h fst/extensions/pdt/pdt.h \
@@ -264,11 +267,16 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 @HAVE_FAR_TRUE@far_include_headers = fst/extensions/far/compile-strings.h \
-@HAVE_FAR_TRUE@fst/extensions/far/create.h fst/extensions/far/extract.h \
-@HAVE_FAR_TRUE@fst/extensions/far/far.h fst/extensions/far/farlib.h \
-@HAVE_FAR_TRUE@fst/extensions/far/farscript.h fst/extensions/far/info.h \
-@HAVE_FAR_TRUE@fst/extensions/far/main.h fst/extensions/far/print-strings.h \
-@HAVE_FAR_TRUE@fst/extensions/far/stlist.h fst/extensions/far/sttable.h
+@HAVE_FAR_TRUE@fst/extensions/far/create.h fst/extensions/far/equal.h \
+@HAVE_FAR_TRUE@fst/extensions/far/extract.h fst/extensions/far/far.h \
+@HAVE_FAR_TRUE@fst/extensions/far/farlib.h fst/extensions/far/farscript.h \
+@HAVE_FAR_TRUE@fst/extensions/far/info.h fst/extensions/far/main.h \
+@HAVE_FAR_TRUE@fst/extensions/far/print-strings.h fst/extensions/far/stlist.h \
+@HAVE_FAR_TRUE@fst/extensions/far/sttable.h
+
+@HAVE_NGRAM_TRUE@ngram_include_headers = fst/extensions/ngram/bitmap-index.h \
+@HAVE_NGRAM_TRUE@fst/extensions/ngram/ngram-fst.h \
+@HAVE_NGRAM_TRUE@fst/extensions/ngram/nthbit.h
 
 @HAVE_PDT_TRUE@pdt_include_headers = fst/extensions/pdt/collection.h \
 @HAVE_PDT_TRUE@fst/extensions/pdt/compose.h fst/extensions/pdt/expand.h \
@@ -323,6 +331,7 @@ fst/replace-util.h fst/icu.h fst/string.h fst/signed-log-weight.h \
 fst/sparse-tuple-weight.h fst/sparse-power-weight.h fst/expectation-weight.h \
 fst/symbol-table-ops.h fst/bi-table.h \
 $(far_include_headers) \
+$(ngram_include_headers) \
 $(pdt_include_headers) \
 $(script_include_headers)
 

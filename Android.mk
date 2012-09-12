@@ -1,9 +1,7 @@
-#
 # Copyright 2012 Google Inc. All Rights Reserved.
 # Author: npereira@google.com (Nicole Pereira)
 #
 # Android makefile for openfst library.
-#
 
 OPENFST_DIR := $(call my-dir)
 

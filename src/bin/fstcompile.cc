@@ -45,14 +45,14 @@ int main(int argc, char **argv) {
   usage += " [text.fst [binary.fst]]\n";
 
   std::set_new_handler(FailedNewHandler);
-  SetFlags(usage.c_str(), &argc, &argv, true);
+  SET_FLAGS(usage.c_str(), &argc, &argv, true);
   if (argc > 3) {
     ShowUsage();
     return 1;
   }
 
   const char *source = "standard input";
-  istream *istrm = &std::cin;
+  istream *istrm = &cin;
   if (argc > 1 && strcmp(argv[1], "-") != 0) {
     source = argv[1];
     istrm = new fst::ifstream(argv[1]);
@@ -63,13 +63,16 @@ int main(int argc, char **argv) {
   }
   const SymbolTable *isyms = 0, *osyms = 0, *ssyms = 0;
 
+  fst::SymbolTableTextOptions opts;
+  opts.allow_negative = FLAGS_allow_negative_labels;
+
   if (!FLAGS_isymbols.empty()) {
-    isyms = SymbolTable::ReadText(FLAGS_isymbols, FLAGS_allow_negative_labels);
+    isyms = SymbolTable::ReadText(FLAGS_isymbols, opts);
     if (!isyms) exit(1);
   }
 
   if (!FLAGS_osymbols.empty()) {
-    osyms = SymbolTable::ReadText(FLAGS_osymbols, FLAGS_allow_negative_labels);
+    osyms = SymbolTable::ReadText(FLAGS_osymbols, opts);
     if (!osyms) exit(1);
   }
 
@@ -85,7 +88,7 @@ int main(int argc, char **argv) {
                 FLAGS_acceptor, FLAGS_keep_isymbols, FLAGS_keep_osymbols,
                 FLAGS_keep_state_numbering, FLAGS_allow_negative_labels);
 
-  if (istrm != &std::cin)
+  if (istrm != &cin)
     delete istrm;
 
   return 0;

@@ -31,6 +31,7 @@ using std::vector;
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <fst/fst.h>
 #include <fst/util.h>
 #include <fst/vector-fst.h>

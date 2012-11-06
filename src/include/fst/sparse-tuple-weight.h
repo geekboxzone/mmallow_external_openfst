@@ -33,7 +33,7 @@
 #include<string>
 #include<list>
 #include<stack>
-#include<unordered_map>
+#include<tr1/unordered_map>
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
 
@@ -140,7 +140,7 @@ class SparseTupleWeight {
   // Assumes H() function exists for the hash of the key value
   size_t Hash() const {
     uint64 h = 0;
-    std::hash<K> H;
+    std::tr1::hash<K> H;
     for (SparseTupleWeightIterator<W, K> it(*this); !it.Done(); it.Next()) {
       h = 5 * h + H(it.Value().first);
       h = 13 * h + it.Value().second.Hash();

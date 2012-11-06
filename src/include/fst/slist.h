@@ -22,9 +22,9 @@
 
 #include <fst/config.h>
 
-#if !defined(__ANDROID__) && HAVE___GNU_CXX__SLIST_INT_
+#ifdef HAVE___GNU_CXX__SLIST_INT_
 
-#include <slist>
+#include <ext/slist>
 
 namespace fst {
 

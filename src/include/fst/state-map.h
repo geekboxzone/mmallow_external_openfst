@@ -23,7 +23,7 @@
 #define FST_LIB_STATE_MAP_H__
 
 #include <algorithm>
-#include <unordered_map>
+#include <tr1/unordered_map>
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
 #include <string>

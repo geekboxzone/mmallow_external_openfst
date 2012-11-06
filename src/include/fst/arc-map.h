@@ -23,7 +23,7 @@
 #ifndef FST_LIB_ARC_MAP_H__
 #define FST_LIB_ARC_MAP_H__
 
-#include <unordered_map>
+#include <tr1/unordered_map>
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
 #include <string>

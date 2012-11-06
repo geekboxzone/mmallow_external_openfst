@@ -20,7 +20,7 @@
 #include <vector>
 using std::vector;
 #include <string>
-#include <unordered_set>
+#include <tr1/unordered_set>
 using std::tr1::unordered_set;
 using std::tr1::unordered_multiset;
 

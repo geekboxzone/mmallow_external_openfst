@@ -17,8 +17,10 @@ LOCAL_C_INCLUDES += \
 	$(OPENFST_DIR)/src/include/
 
 LOCAL_LDLIBS += -lpthread
+LOCAL_NDK_STL_VARIANT := gnustl_static
+LOCAL_SDK_VERSION := 14
 
 LOCAL_SRC_FILES := $(call private-function-all-cpp-files-under, src/lib)
-LOCAL_MODULE := libopenfst
-include external/stlport/libstlport.mk
+LOCAL_MODULE := libopenfst-gnustl-rtti
+
 include $(BUILD_STATIC_LIBRARY)

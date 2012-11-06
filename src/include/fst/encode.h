@@ -22,7 +22,7 @@
 #define FST_LIB_ENCODE_H__
 
 #include <climits>
-#include <unordered_map>
+#include <tr1/unordered_map>
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
 #include <string>

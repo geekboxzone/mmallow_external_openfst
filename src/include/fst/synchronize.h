@@ -22,10 +22,10 @@
 #define FST_LIB_SYNCHRONIZE_H__
 
 #include <algorithm>
-#include <unordered_map>
+#include <tr1/unordered_map>
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
-#include <unordered_set>
+#include <tr1/unordered_set>
 using std::tr1::unordered_set;
 using std::tr1::unordered_multiset;
 #include <string>

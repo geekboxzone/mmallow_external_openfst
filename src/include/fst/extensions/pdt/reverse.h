@@ -21,7 +21,7 @@
 #ifndef FST_EXTENSIONS_PDT_REVERSE_H__
 #define FST_EXTENSIONS_PDT_REVERSE_H__
 
-#include <unordered_map>
+#include <tr1/unordered_map>
 using std::tr1::unordered_map;
 using std::tr1::unordered_multimap;
 #include <vector>

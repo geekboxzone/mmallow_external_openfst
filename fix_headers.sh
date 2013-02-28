@@ -6,7 +6,7 @@ function fix_tr1() {
   grep $1 $INPUT_FILE > /dev/null 2>&1
   if [ $? -eq 0 ] ; then
     echo "Modifying $INPUT_FILE ..."
-    sed -e "s/$1/$2/g" $INPUT_FILE > .tmp
+    sed 's/$1/$2/g' $INPUT_FILE > .tmp
     if [ $? -ne 0 ] ; then
       echo "sed failed!"
       return 1

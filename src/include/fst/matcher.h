@@ -75,6 +75,8 @@ namespace fst {
 //   bool Done() const;         // No more matches.
 //   const A& Value() const;    // Current arc (when !Done)
 //   void Next();               // Advance to next arc (when !Done)
+//   // Initially and after SetState() the iterator methods
+//   // have undefined behavior until Find() is called.
 //
 //   // Return matcher FST.
 //   const F& GetFst() const;
@@ -223,13 +225,44 @@ class SortedMatcher : public MatcherBase<typename F::Arc> {
     loop_.nextstate = s;
   }
 
-  bool Find(Label match_label);
+  bool Find(Label match_label) {
+    exact_match_ = true;
+    if (error_) {
+      current_loop_ = false;
+      match_label_ = kNoLabel;
+      return false;
+    }
+    current_loop_ = match_label == 0;
+    match_label_ = match_label == kNoLabel ? 0 : match_label;
+    if (Search()) {
+      return true;
+    } else {
+      return current_loop_;
+    }
+  }
 
+  // Positions matcher to the first position where inserting
+  // match_label would maintain the sort order.
+  void LowerBound(Label match_label) {
+    exact_match_ = false;
+    current_loop_ = false;
+    if (error_) {
+      match_label_ = kNoLabel;
+      return;
+    }
+    match_label_ = match_label;
+    Search();
+  }
+
+  // After Find(), returns false if no more exact matches.
+  // After LowerBound(), returns false if no more arcs.
   bool Done() const {
     if (current_loop_)
       return false;
     if (aiter_->Done())
       return true;
+    if (!exact_match_)
+      return false;
     aiter_->SetFlags(
       match_type_ == MATCH_INPUT ? kArcILabelValue : kArcOLabelValue,
       kArcValueFlags);
@@ -261,12 +294,16 @@ class SortedMatcher : public MatcherBase<typename F::Arc> {
     return outprops;
   }
 
+  size_t Position() const { return aiter_ ? aiter_->Position() : 0; }
+
  private:
   virtual void SetState_(StateId s) { SetState(s); }
   virtual bool Find_(Label label) { return Find(label); }
   virtual bool Done_() const { return Done(); }
   virtual const Arc& Value_() const { return Value(); }
   virtual void Next_() { Next(); }
+
+  bool Search();
 
   const F *fst_;
   StateId s_;                     // Current state
@@ -277,20 +314,16 @@ class SortedMatcher : public MatcherBase<typename F::Arc> {
   size_t narcs_;                  // Current state arc count
   Arc loop_;                      // For non-consuming symbols
   bool current_loop_;             // Current arc is the implicit loop
+  bool exact_match_;              // Exact match or lower bound?
   bool error_;                    // Error encountered
 
   void operator=(const SortedMatcher<F> &);  // Disallow
 };
 
+// Returns true iff match to match_label_. Positions arc iterator at
+// lower bound regardless.
 template <class F> inline
-bool SortedMatcher<F>::Find(Label match_label) {
-  if (error_) {
-    current_loop_ = false;
-    match_label_ = kNoLabel;
-    return false;
-  }
-  current_loop_ = match_label == 0;
-  match_label_ = match_label == kNoLabel ? 0 : match_label;
+bool SortedMatcher<F>::Search() {
   aiter_->SetFlags(
       match_type_ == MATCH_INPUT ? kArcILabelValue : kArcOLabelValue,
       kArcValueFlags);
@@ -321,7 +354,8 @@ bool SortedMatcher<F>::Find(Label match_label) {
         return true;
       }
     }
-    return current_loop_;
+    aiter_->Seek(low);
+    return false;
   } else {
     // Linear search for match.
     for (aiter_->Reset(); !aiter_->Done(); aiter_->Next()) {
@@ -333,7 +367,7 @@ bool SortedMatcher<F>::Find(Label match_label) {
       if (label > match_label_)
         break;
     }
-    return current_loop_;
+    return false;
   }
 }
 
@@ -1047,16 +1081,19 @@ class MultiEpsMatcher {
     }
   }
 
+  void RemoveMultiEpsLabel(Label label) {
+    if (label == 0) {
+      FSTERROR() << "MultiEpsMatcher: Bad multi-eps label: 0";
+    } else {
+      multi_eps_labels_.Erase(label);
+    }
+  }
+
   void ClearMultiEpsLabels() {
     multi_eps_labels_.Clear();
   }
 
 private:
-  // Specialized for 'set' - log lookup
-  bool IsMultiEps(const set<Label> &multi_eps_labels, Label label) const {
-    return multi_eps_labels.Find(label) != multi_eps_labels.end();
-  }
-
   M *matcher_;
   uint32 flags_;
   bool own_matcher_;             // Does this class delete the matcher?

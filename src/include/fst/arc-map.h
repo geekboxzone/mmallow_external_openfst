@@ -165,8 +165,8 @@ void ArcMap(MutableFst<A> *fst, C* mapper) {
           } else {
             fst->SetFinal(s, final_arc.weight);
           }
-          break;
         }
+        break;
       }
       case MAP_REQUIRE_SUPERFINAL: {
         if (s != superfinal) {
@@ -314,8 +314,6 @@ class ArcMapFstImpl : public CacheImpl<B> {
   using FstImpl<B>::SetProperties;
   using FstImpl<B>::SetInputSymbols;
   using FstImpl<B>::SetOutputSymbols;
-
-  using VectorFstBaseImpl<typename CacheImpl<B>::State>::NumStates;
 
   using CacheImpl<B>::PushArc;
   using CacheImpl<B>::HasArcs;

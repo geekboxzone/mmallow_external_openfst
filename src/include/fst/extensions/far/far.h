@@ -273,13 +273,10 @@ FarWriter<A> *FarWriter<A>::Create(const string &filename, FarType type) {
         return STListFarWriter<A>::Create(filename);
     case FAR_STTABLE:
       return STTableFarWriter<A>::Create(filename);
-      break;
     case FAR_STLIST:
       return STListFarWriter<A>::Create(filename);
-      break;
     case FAR_FST:
       return FstFarWriter<A>::Create(filename);
-      break;
     default:
       LOG(ERROR) << "FarWriter::Create: unknown far type";
       return 0;

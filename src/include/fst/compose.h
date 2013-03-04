@@ -122,7 +122,7 @@ class ComposeFstImplBase : public CacheImpl<A> {
 
   ComposeFstImplBase(const Fst<A> &fst1, const Fst<A> &fst2,
                      const CacheOptions &opts)
-      :CacheImpl<A>(opts) {
+      : CacheImpl<A>(opts) {
     VLOG(2) << "ComposeFst(" << this << "): Begin";
     SetType("compose");
 
@@ -137,7 +137,7 @@ class ComposeFstImplBase : public CacheImpl<A> {
   }
 
   ComposeFstImplBase(const ComposeFstImplBase<A> &impl)
-      : CacheImpl<A>(impl) {
+      : CacheImpl<A>(impl, true) {
     SetProperties(impl.Properties(), kCopyProperties);
     SetInputSymbols(impl.InputSymbols());
     SetOutputSymbols(impl.OutputSymbols());
@@ -274,6 +274,13 @@ class ComposeFstImpl : public ComposeFstImplBase<typename M1::Arc> {
     else
       OrderedExpand(s, fst2_, s2, fst1_, s1, matcher2_, true);
   }
+
+  const FST1 &GetFst1() { return fst1_; }
+  const FST2 &GetFst2() { return fst2_; }
+  M1 *GetMatcher1() { return matcher1_; }
+  M2 *GetMatcher2() { return matcher2_; }
+  F *GetFilter() { return filter_; }
+  T *GetStateTable() { return state_table_; }
 
  private:
   // This does that actual matching of labels in the composition. The

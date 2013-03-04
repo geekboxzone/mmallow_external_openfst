@@ -53,6 +53,11 @@ template <class A> class ArcIteratorData;
 template <class A> class MatcherBase;
 
 struct FstReadOptions {
+  // FileReadMode(s) are advisory, there are many conditions than prevent a
+  // file from being mapped, READ mode will be selected in these cases with
+  // a warning indicating why it was chosen.
+  enum FileReadMode { READ, MAP };
+
   string source;                // Where you're reading from
   const FstHeader *header;      // Pointer to Fst header. If non-zero, use
                                 // this info (don't read a stream header)
@@ -60,19 +65,20 @@ struct FstReadOptions {
                                 // this info (read and skip stream isymbols)
   const SymbolTable* osymbols;  // Pointer to output symbols. If non-zero, use
                                 // this info (read and skip stream osymbols)
+  FileReadMode mode;            // Read or map files (advisory, if possible)
 
-  explicit FstReadOptions(const string& src = "<unspecfied>",
+  explicit FstReadOptions(const string& src = "<unspecified>",
                           const FstHeader *hdr = 0,
                           const SymbolTable* isym = 0,
-                          const SymbolTable* osym = 0)
-      : source(src), header(hdr), isymbols(isym), osymbols(osym) {}
+                          const SymbolTable* osym = 0);
 
   explicit FstReadOptions(const string& src,
                           const SymbolTable* isym,
-                          const SymbolTable* osym = 0)
-      : source(src), header(0), isymbols(isym), osymbols(osym) {}
-};
+                          const SymbolTable* osym = 0);
 
+  // Helper function to convert strings FileReadModes into their enum value.
+  static FileReadMode ReadMode(const string &mode);
+};
 
 struct FstWriteOptions {
   string source;                 // Where you're writing to

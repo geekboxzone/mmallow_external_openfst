@@ -55,10 +55,11 @@ SymbolTableImpl* SymbolTableImpl::ReadText(istream &strm,
       continue;
     if (col.size() != 2) {
       LOG(ERROR) << "SymbolTable::ReadText: Bad number of columns ("
-                 << col.size() << " skipping), "
+                 << col.size() << "), "
                  << "file = " << filename << ", line = " << nline
                  << ":<" << line << ">";
-      continue;
+      delete impl;
+      return 0;
     }
     const char *symbol = col[0];
     const char *value = col[1];
@@ -67,9 +68,10 @@ SymbolTableImpl* SymbolTableImpl::ReadText(istream &strm,
     if (p < value + strlen(value) ||
         (!opts.allow_negative && key < 0) || key == -1) {
       LOG(ERROR) << "SymbolTable::ReadText: Bad non-negative integer \""
-                 << value << "\" (skipping), "
+                 << value << "\", "
                  << "file = " << filename << ", line = " << nline;
-      continue;
+      delete impl;
+      return 0;
     }
     impl->AddSymbol(symbol, key);
   }

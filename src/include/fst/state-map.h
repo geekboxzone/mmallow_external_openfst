@@ -191,8 +191,6 @@ class StateMapFstImpl : public CacheImpl<B> {
   using FstImpl<B>::SetInputSymbols;
   using FstImpl<B>::SetOutputSymbols;
 
-  using VectorFstBaseImpl<typename CacheImpl<B>::State>::NumStates;
-
   using CacheImpl<B>::PushArc;
   using CacheImpl<B>::HasArcs;
   using CacheImpl<B>::HasFinal;
@@ -535,7 +533,7 @@ class ArcUniqueMapper {
   explicit ArcUniqueMapper(const Fst<A> &fst) : fst_(fst), i_(0) {}
 
   // Allows updating Fst argument; pass only if changed.
-  ArcUniqueMapper(const ArcSumMapper<A> &mapper,
+  ArcUniqueMapper(const ArcUniqueMapper<A> &mapper,
                   const Fst<A> *fst = 0)
       : fst_(fst ? *fst : mapper.fst_), i_(0) {}
 

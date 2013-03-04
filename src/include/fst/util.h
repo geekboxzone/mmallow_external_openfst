@@ -268,17 +268,17 @@ void WeightToStr(Weight w, string *s) {
   s->append(strm.str().data(), strm.str().size());
 }
 
-// Utilities for reading/writing label pairs
+// Utilities for reading/writing integer pairs (typically labels)
 
 // Returns true on success
-template <typename Label>
-bool ReadLabelPairs(const string& filename,
-                    vector<pair<Label, Label> >* pairs,
+template <typename I>
+bool ReadIntPairs(const string& filename,
+                    vector<pair<I, I> >* pairs,
                     bool allow_negative = false) {
   ifstream strm(filename.c_str());
 
   if (!strm) {
-    LOG(ERROR) << "ReadLabelPairs: Can't open file: " << filename;
+    LOG(ERROR) << "ReadIntPairs: Can't open file: " << filename;
     return false;
   }
 
@@ -291,33 +291,34 @@ bool ReadLabelPairs(const string& filename,
     ++nline;
     vector<char *> col;
     SplitToVector(line, "\n\t ", &col, true);
-    if (col.size() == 0 || col[0][0] == '\0')  // empty line
+    // empty line or comment?
+    if (col.size() == 0 || col[0][0] == '\0' || col[0][0] == '#')
       continue;
     if (col.size() != 2) {
-      LOG(ERROR) << "ReadLabelPairs: Bad number of columns, "
+      LOG(ERROR) << "ReadIntPairs: Bad number of columns, "
                  << "file = " << filename << ", line = " << nline;
       return false;
     }
 
     bool err;
-    Label frmlabel = StrToInt64(col[0], filename, nline, allow_negative, &err);
+    I i1 = StrToInt64(col[0], filename, nline, allow_negative, &err);
     if (err) return false;
-    Label tolabel = StrToInt64(col[1], filename, nline, allow_negative, &err);
+    I i2 = StrToInt64(col[1], filename, nline, allow_negative, &err);
     if (err) return false;
-    pairs->push_back(make_pair(frmlabel, tolabel));
+    pairs->push_back(make_pair(i1, i2));
   }
   return true;
 }
 
 // Returns true on success
-template <typename Label>
-bool WriteLabelPairs(const string& filename,
-                     const vector<pair<Label, Label> >& pairs) {
+template <typename I>
+bool WriteIntPairs(const string& filename,
+                   const vector<pair<I, I> >& pairs) {
   ostream *strm = &cout;
   if (!filename.empty()) {
     strm = new ofstream(filename.c_str());
     if (!*strm) {
-      LOG(ERROR) << "WriteLabelPairs: Can't open file: " << filename;
+      LOG(ERROR) << "WriteIntPairs: Can't open file: " << filename;
       return false;
     }
   }
@@ -326,13 +327,28 @@ bool WriteLabelPairs(const string& filename,
     *strm << pairs[n].first << "\t" << pairs[n].second << "\n";
 
   if (!*strm) {
-    LOG(ERROR) << "WriteLabelPairs: Write failed: "
+    LOG(ERROR) << "WriteIntPairs: Write failed: "
                << (filename.empty() ? "standard output" : filename);
     return false;
   }
   if (strm != &cout)
     delete strm;
   return true;
+}
+
+// Utilities for reading/writing label pairs
+
+template <typename Label>
+bool ReadLabelPairs(const string& filename,
+                    vector<pair<Label, Label> >* pairs,
+                    bool allow_negative = false) {
+  return ReadIntPairs(filename, pairs, allow_negative);
+}
+
+template <typename Label>
+bool WriteLabelPairs(const string& filename,
+                     vector<pair<Label, Label> >& pairs) {
+  return WriteIntPairs(filename, pairs);
 }
 
 // Utilities for converting a type name to a legal C symbol.
@@ -344,8 +360,8 @@ void ConvertToLegalCSymbol(string *s);
 // UTILITIES FOR STREAM I/O
 //
 
-bool AlignInput(istream &strm, int align);
-bool AlignOutput(ostream &strm, int align);
+bool AlignInput(istream &strm);
+bool AlignOutput(ostream &strm);
 
 //
 // UTILITIES FOR PROTOCOL BUFFER I/O
@@ -380,6 +396,17 @@ public:
         max_key_ = key;
   }
 
+  void Erase(Key key) {
+    set_.erase(key);
+    if (set_.empty()) {
+        min_key_ = max_key_ = NoKey;
+    } else if (key == min_key_) {
+      ++min_key_;
+    } else if (key == max_key_) {
+      --max_key_;
+    }
+  }
+
   void Clear() {
     set_.clear();
     min_key_ = max_key_ = NoKey;
@@ -393,9 +420,25 @@ public:
       return set_.find(key);
   }
 
+  bool Member(Key key) const {
+    if (min_key_ == NoKey || key < min_key_ || max_key_ < key) {
+      return false;   // out of range
+    } else if (min_key_ != NoKey && max_key_ + 1 == min_key_ + set_.size()) {
+      return true;    // dense range
+    } else {
+      return set_.find(key) != set_.end();
+    }
+  }
+
   const_iterator Begin() const { return set_.begin(); }
 
   const_iterator End() const { return set_.end(); }
+
+  // All stored keys are greater than or equal to this value.
+  Key LowerBound() const { return min_key_; }
+
+  // All stored keys are less than or equal to this value.
+  Key UpperBound() const { return max_key_; }
 
 private:
   set<Key> set_;

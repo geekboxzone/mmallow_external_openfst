@@ -32,6 +32,7 @@ using std::vector;
 #include <fst/cache.h>
 #include <fst/expanded-fst.h>
 #include <fst/fst-decl.h>  // For optional argument declarations
+#include <fst/mapped-file.h>
 #include <fst/matcher.h>
 #include <fst/test-properties.h>
 #include <fst/util.h>
@@ -134,7 +135,9 @@ class CompactFstData {
   typedef U Unsigned;
 
   CompactFstData()
-      : states_(0),
+      : states_region_(0),
+        compacts_region_(0),
+        states_(0),
         compacts_(0),
         nstates_(0),
         ncompacts_(0),
@@ -150,8 +153,14 @@ class CompactFstData {
                  const Compactor &compactor);
 
   ~CompactFstData() {
-    delete[] states_;
-    delete[] compacts_;
+    if (states_region_ == NULL) {
+      delete [] states_;
+    }
+    delete states_region_;
+    if (compacts_region_ == NULL) {
+      delete [] compacts_;
+    }
+    delete compacts_region_;
   }
 
   template <class Compactor>
@@ -175,10 +184,9 @@ class CompactFstData {
 
   bool Error() const { return error_; }
 
-  // Byte alignment for states and arcs in file format (version 1 only)
-  static const int kFileAlign = 16;
-
  private:
+  MappedFile *states_region_;
+  MappedFile *compacts_region_;
   Unsigned *states_;
   CompactElement *compacts_;
   size_t nstates_;
@@ -190,13 +198,11 @@ class CompactFstData {
 };
 
 template <class E, class U>
-const int CompactFstData<E, U>::kFileAlign;
-
-
-template <class E, class U>
 template <class A, class C>
 CompactFstData<E, U>::CompactFstData(const Fst<A> &fst, const C &compactor)
-    : states_(0),
+    : states_region_(0),
+      compacts_region_(0),
+      states_(0),
       compacts_(0),
       nstates_(0),
       ncompacts_(0),
@@ -265,7 +271,9 @@ template <class Iterator, class C>
 CompactFstData<E, U>::CompactFstData(const Iterator &begin,
                                      const Iterator &end,
                                      const C &compactor)
-    : states_(0),
+    : states_region_(0),
+      compacts_region_(0),
+      states_(0),
       compacts_(0),
       nstates_(0),
       ncompacts_(0),
@@ -361,42 +369,40 @@ CompactFstData<E, U> *CompactFstData<E, U>::Read(
   data->narcs_ = hdr.NumArcs();
 
   if (compactor.Size() == -1) {
-    data->states_ = new Unsigned[data->nstates_ + 1];
-    if ((hdr.GetFlags() & FstHeader::IS_ALIGNED) &&
-        !AlignInput(strm, kFileAlign)) {
+    if ((hdr.GetFlags() & FstHeader::IS_ALIGNED) && !AlignInput(strm)) {
       LOG(ERROR) << "CompactFst::Read: Alignment failed: " << opts.source;
       delete data;
       return 0;
     }
-    // TODO: memory map this
     size_t b = (data->nstates_ + 1) * sizeof(Unsigned);
-    strm.read(reinterpret_cast<char *>(data->states_), b);
-    if (!strm) {
+    data->states_region_ = MappedFile::Map(&strm, opts, b);
+    if (!strm || data->states_region_ == NULL) {
       LOG(ERROR) << "CompactFst::Read: Read failed: " << opts.source;
       delete data;
       return 0;
     }
+    data->states_ = static_cast<Unsigned *>(
+        data->states_region_->mutable_data());
   } else {
     data->states_ = 0;
   }
   data->ncompacts_ = compactor.Size() == -1
       ? data->states_[data->nstates_]
       : data->nstates_ * compactor.Size();
-  data->compacts_ = new CompactElement[data->ncompacts_];
-  // TODO: memory map this
-  size_t b = data->ncompacts_ * sizeof(CompactElement);
-  if ((hdr.GetFlags() & FstHeader::IS_ALIGNED) &&
-      !AlignInput(strm, kFileAlign)) {
+  if ((hdr.GetFlags() & FstHeader::IS_ALIGNED) && !AlignInput(strm)) {
     LOG(ERROR) << "CompactFst::Read: Alignment failed: " << opts.source;
     delete data;
     return 0;
   }
-  strm.read(reinterpret_cast<char *>(data->compacts_), b);
-  if (!strm) {
+  size_t b = data->ncompacts_ * sizeof(CompactElement);
+  data->compacts_region_ = MappedFile::Map(&strm, opts, b);
+  if (!strm || data->compacts_region_ == NULL) {
     LOG(ERROR) << "CompactFst::Read: Read failed: " << opts.source;
     delete data;
     return 0;
   }
+  data->compacts_ = static_cast<CompactElement *>(
+      data->compacts_region_->mutable_data());
   return data;
 }
 
@@ -404,14 +410,14 @@ template<class E, class U>
 bool CompactFstData<E, U>::Write(ostream &strm,
                                  const FstWriteOptions &opts) const {
   if (states_) {
-    if (opts.align && !AlignOutput(strm, kFileAlign)) {
+    if (opts.align && !AlignOutput(strm)) {
       LOG(ERROR) << "CompactFst::Write: Alignment failed: " << opts.source;
       return false;
     }
     strm.write(reinterpret_cast<char *>(states_),
                (nstates_ + 1) * sizeof(Unsigned));
   }
-  if (opts.align && !AlignOutput(strm, kFileAlign)) {
+  if (opts.align && !AlignOutput(strm)) {
     LOG(ERROR) << "CompactFst::Write: Alignment failed: " << opts.source;
     return false;
   }
@@ -899,6 +905,17 @@ class CompactFst : public ImplToExpandedFst< CompactFstImpl<A, C, U> > {
     ImplToFst< Impl, ExpandedFst<A> >::SetImpl(impl, own_impl);
   }
 
+  // Use overloading to extract the type of the argument.
+  static Impl* GetImplIfCompactFst(const CompactFst<A, C, U> &compact_fst) {
+    return compact_fst.GetImpl();
+  }
+
+  // This does not give privileged treatment to subclasses of CompactFst.
+  template<typename NonCompactFst>
+  static Impl* GetImplIfCompactFst(const NonCompactFst& fst) {
+    return NULL;
+  }
+
   void operator=(const CompactFst<A, C, U> &fst);  // disallow
 };
 
@@ -914,20 +931,16 @@ bool CompactFst<A, C, U>::WriteFst(const F &fst,
   typedef U Unsigned;
   typedef typename C::Element CompactElement;
   typedef typename A::Weight Weight;
-  static const int kFileAlign =
-      CompactFstData<CompactElement, U>::kFileAlign;
   int file_version = opts.align ?
       CompactFstImpl<A, C, U>::kAlignedFileVersion :
       CompactFstImpl<A, C, U>::kFileVersion;
   size_t num_arcs = -1, num_states = -1, num_compacts = -1;
   C first_pass_compactor = compactor;
-  if (fst.Type() == CompactFst<A, C, U>().Type()) {
-    const CompactFst<A, C, U> *compact_fst =
-        reinterpret_cast<const CompactFst<A, C, U> *>(&fst);
-    num_arcs = compact_fst->GetImpl()->Data()->NumArcs();
-    num_states = compact_fst->GetImpl()->Data()->NumStates();
-    num_compacts = compact_fst->GetImpl()->Data()->NumCompacts();
-    first_pass_compactor = *compact_fst->GetImpl()->GetCompactor();
+  if (Impl* impl = GetImplIfCompactFst(fst)) {
+    num_arcs = impl->Data()->NumArcs();
+    num_states = impl->Data()->NumStates();
+    num_compacts = impl->Data()->NumCompacts();
+    first_pass_compactor = *impl->GetCompactor();
   } else {
     // A first pass is needed to compute the state of the compactor, which
     // is saved ahead of the rest of the data structures.  This unfortunately
@@ -971,7 +984,7 @@ bool CompactFst<A, C, U>::WriteFst(const F &fst,
                              &hdr);
   first_pass_compactor.Write(strm);
   if (first_pass_compactor.Size() == -1)  {
-    if (opts.align && !AlignOutput(strm, kFileAlign)) {
+    if (opts.align && !AlignOutput(strm)) {
       LOG(ERROR) << "CompactFst::Write: Alignment failed: " << opts.source;
       return false;
     }
@@ -986,7 +999,7 @@ bool CompactFst<A, C, U>::WriteFst(const F &fst,
     }
     strm.write(reinterpret_cast<const char *>(&compacts), sizeof(compacts));
   }
-  if (opts.align && !AlignOutput(strm, kFileAlign)) {
+  if (opts.align && !AlignOutput(strm)) {
     LOG(ERROR) << "Could not align file during write after writing states";
   }
   C second_pass_compactor = compactor;

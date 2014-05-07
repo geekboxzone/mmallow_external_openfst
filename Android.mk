@@ -16,7 +16,6 @@ LOCAL_CPP_EXTENSION := .cc
 LOCAL_C_INCLUDES += \
 	$(OPENFST_DIR)/src/include/
 
-LOCAL_LDLIBS += -lpthread
 LOCAL_NDK_STL_VARIANT := gnustl_static
 LOCAL_SDK_VERSION := 14
 
